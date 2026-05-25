@@ -10,7 +10,7 @@ namespace decomposition::SVD {
 
 class DenseMatrix {
 public:
-  DenseMatrix() = default;
+  DenseMatrix() = delete;
 
   DenseMatrix(std::size_t rows, std::size_t cols, std::vector<double> values)
       : rows_(rows), cols_(cols), values_(std::move(values)) {
@@ -60,7 +60,7 @@ struct SVDInput {
   std::vector<std::string> row_labels;
   std::vector<std::string> column_labels;
 
-  SVDInput() = default;
+  SVDInput() = delete;
   SVDInput(DenseMatrix input_matrix, std::vector<std::string> input_row_labels = {},
            std::vector<std::string> input_column_labels = {});
 
