@@ -1,0 +1,32 @@
+# C++ build products
+cpp/build/
+*.o
+*.dSYM/
+
+# Python build products
+.venv/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+
+# LaTeX build products
+write_up/*.aux
+write_up/*.bbl
+write_up/*.bcf
+write_up/*.blg
+write_up/*.fdb_latexmk
+write_up/*.fls
+write_up/*.log
+write_up/*.out
+write_up/*.run.xml
+write_up/*.synctex.gz
+write_up/*.toc
+write_up/*.listing
+write_up/_minted/
+
+# Local editor files
+.DS_Store
+*.swp
+write_up

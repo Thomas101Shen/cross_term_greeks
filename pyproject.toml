@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=58", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cross-term-greeks"
+version = "0.1.0"
+description = "PCA/SVD factor decomposition and cross-term Greek attribution utilities"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.23"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
