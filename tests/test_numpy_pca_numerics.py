@@ -64,6 +64,50 @@ class NumpyPCANumericsTest(unittest.TestCase):
             1.0e-12,
         )
 
+    def test_covariance_solver_matches_svd_solver_up_to_sign(self):
+        observations = np.array(
+            [
+                [1.0, 0.4, 0.7],
+                [1.5, 0.8, 0.6],
+                [2.0, 1.4, 0.2],
+                [2.5, 2.1, -0.1],
+                [3.0, 2.8, -0.4],
+            ],
+            dtype=float,
+        )
+        svd = fit_pca(observations, n_components=3, solver="svd")
+        covariance = fit_pca(observations, n_components=3, solver="covariance")
+
+        self.assertLess(
+            np.linalg.norm(
+                canonicalize_columns(svd.loadings)
+                - canonicalize_columns(covariance.loadings)
+            ),
+            1.0e-12,
+        )
+        self.assertLess(
+            np.linalg.norm(svd.explained_variance - covariance.explained_variance),
+            1.0e-12,
+        )
+
+    def test_covariance_solver_rejects_non_demeaned_input_when_center_false(self):
+        observations = np.array(
+            [
+                [1.0, 2.0],
+                [2.0, 4.0],
+                [3.0, 8.0],
+            ],
+            dtype=float,
+        )
+
+        with self.assertRaises(ValueError):
+            fit_pca(
+                observations,
+                n_components=2,
+                solver="covariance",
+                center=False,
+            )
+
     def test_nearly_collinear_inputs_still_give_orthonormal_loadings(self):
         x = np.linspace(-1.0, 1.0, 12)
         observations = np.column_stack(

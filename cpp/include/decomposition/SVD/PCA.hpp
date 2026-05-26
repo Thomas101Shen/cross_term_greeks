@@ -11,16 +11,22 @@
 
 namespace decomposition::SVD {
 
+enum class PCASolver {
+  SVD,
+  Covariance,
+};
+
 struct PCAOptions {
   bool center_columns = true;
   std::size_t components = 0;
+  PCASolver solver = PCASolver::SVD;
   std::string factor_type = "PCA";
   std::string factor_name_prefix = "PC";
 };
 
 struct PCAResult {
-  DenseMatrix loadings;
-  DenseMatrix scores;
+  Matrix loadings;
+  Matrix scores;
   std::vector<double> singular_values;
   std::vector<double> explained_variance;
   std::vector<double> explained_variance_ratio;

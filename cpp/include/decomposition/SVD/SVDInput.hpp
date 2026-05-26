@@ -8,28 +8,28 @@
 
 namespace decomposition::SVD {
 
-class DenseMatrix {
+class Matrix {
 public:
-  DenseMatrix() = delete;
+  Matrix() = delete;
 
-  DenseMatrix(std::size_t rows, std::size_t cols, std::vector<double> values)
+  Matrix(std::size_t rows, std::size_t cols, std::vector<double> values)
       : rows_(rows), cols_(cols), values_(std::move(values)) {
     if (rows_ == 0 || cols_ == 0) {
-      throw std::invalid_argument("DenseMatrix: dimensions must be non-zero");
+      throw std::invalid_argument("Matrix: dimensions must be non-zero");
     }
     if (values_.size() != rows_ * cols_) {
-      throw std::invalid_argument("DenseMatrix: value count does not match shape");
+      throw std::invalid_argument("Matrix: value count does not match shape");
     }
   }
 
-  DenseMatrix(const DenseMatrix &) = default;
-  DenseMatrix(DenseMatrix &&) noexcept = default;
-  DenseMatrix &operator=(const DenseMatrix &) = default;
-  DenseMatrix &operator=(DenseMatrix &&) noexcept = default;
-  ~DenseMatrix() = default;
+  Matrix(const Matrix &) = default;
+  Matrix(Matrix &&) noexcept = default;
+  Matrix &operator=(const Matrix &) = default;
+  Matrix &operator=(Matrix &&) noexcept = default;
+  ~Matrix() = default;
 
-  static DenseMatrix zeros(std::size_t rows, std::size_t cols);
-  static DenseMatrix identity(std::size_t size);
+  static Matrix zeros(std::size_t rows, std::size_t cols);
+  static Matrix identity(std::size_t size);
 
   [[nodiscard]] std::size_t rows() const noexcept { return rows_; }
   [[nodiscard]] std::size_t cols() const noexcept { return cols_; }
@@ -56,12 +56,12 @@ private:
 };
 
 struct SVDInput {
-  DenseMatrix matrix;
+  Matrix matrix;
   std::vector<std::string> row_labels;
   std::vector<std::string> column_labels;
 
   SVDInput() = delete;
-  SVDInput(DenseMatrix input_matrix, std::vector<std::string> input_row_labels = {},
+  SVDInput(Matrix input_matrix, std::vector<std::string> input_row_labels = {},
            std::vector<std::string> input_column_labels = {});
 
   SVDInput(const SVDInput &) = default;
@@ -72,11 +72,28 @@ struct SVDInput {
 };
 
 struct SVDResult {
-  DenseMatrix left_singular_vectors;
+  Matrix left_singular_vectors;
   std::vector<double> singular_values;
-  DenseMatrix right_singular_vectors;
+  Matrix right_singular_vectors;
   std::vector<std::string> row_labels;
   std::vector<std::string> column_labels;
+};
+
+struct SymmetricEigenResult {
+  std::vector<double> values;
+  Matrix vectors;
+};
+
+class SymmetricEigenDecomposer {
+public:
+  explicit SymmetricEigenDecomposer(double tolerance = 1.0e-12,
+                                    std::size_t max_sweeps = 100);
+
+  [[nodiscard]] SymmetricEigenResult decompose(const Matrix &input) const;
+
+private:
+  double tolerance_;
+  std::size_t max_sweeps_;
 };
 
 class SVDDecomposer {

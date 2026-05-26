@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import fsum
 from typing import Iterable, Mapping, Sequence
 
 import numpy as np
@@ -187,7 +188,7 @@ def rate_vol_pca_interaction(
         "projected_rate_move": projected_rate_move,
         "projected_vol_move": projected_vol_move,
         "components": components,
-        "interaction_pnl_price": sum(
+        "interaction_pnl_price": fsum(
             float(component["pnl_price"]) for component in components
         ),
     }

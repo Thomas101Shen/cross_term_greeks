@@ -2,6 +2,7 @@
 
 #include "mbs/attribution/CrossSecondOrderCalculator.hpp"
 #include "mbs/attribution/ScalarSecondOrderCalculator.hpp"
+#include "mbs/numerics/CompensatedSum.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -59,9 +60,11 @@ MatrixHessianCalculator::compute(const scenarios::ScenarioLattice &lattice,
   total.method = request.method.empty() ? "matrix_fd" : request.method;
   total.label = total.component + ":matrix";
 
+  numerics::CompensatedSum pnl_sum;
   for (const auto &component : components) {
-    total.pnl_price += component.pnl_price;
+    pnl_sum.add(component.pnl_price);
   }
+  total.pnl_price = pnl_sum.value();
 
   return total;
 }

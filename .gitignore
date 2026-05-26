@@ -30,3 +30,5 @@ write_up/_minted/
 .DS_Store
 *.swp
 write_up
+venv
+venv/bin venv/include venv/lib venv/pyvenv.cfg

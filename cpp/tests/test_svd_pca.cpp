@@ -17,20 +17,22 @@ bool nearly_equal(double lhs, double rhs) { return std::abs(lhs - rhs) < kTolera
 } // namespace
 
 int main() {
-  using decomposition::SVD::DenseMatrix;
+  using decomposition::SVD::Matrix;
   using decomposition::SVD::PCAOptions;
+  using decomposition::SVD::PCASolver;
   using decomposition::SVD::PCATransformer;
   using decomposition::SVD::SVDDecomposer;
   using decomposition::SVD::SVDInput;
+  using decomposition::SVD::SymmetricEigenDecomposer;
   using mbs::factors::FactorKey;
 
-  static_assert(std::is_nothrow_move_constructible_v<DenseMatrix>);
-  static_assert(std::is_nothrow_move_assignable_v<DenseMatrix>);
+  static_assert(std::is_nothrow_move_constructible_v<Matrix>);
+  static_assert(std::is_nothrow_move_assignable_v<Matrix>);
   static_assert(std::is_nothrow_move_constructible_v<SVDInput>);
   static_assert(std::is_nothrow_move_assignable_v<SVDInput>);
 
-  const SVDInput diagonal_input(DenseMatrix(2, 2, {2.0, 0.0, 0.0, 1.0}),
-                                {"OBS_1", "OBS_2"}, {"X", "Y"});
+  const SVDInput diagonal_input(Matrix(2, 2, {2.0, 0.0, 0.0, 1.0}), {"OBS_1", "OBS_2"},
+                                {"X", "Y"});
   const auto svd = SVDDecomposer().decompose(diagonal_input);
   assert(svd.singular_values.size() == 2);
   assert(nearly_equal(svd.singular_values[0], 2.0));
@@ -38,7 +40,13 @@ int main() {
   assert(nearly_equal(std::abs(svd.right_singular_vectors(0, 0)), 1.0));
   assert(nearly_equal(std::abs(svd.right_singular_vectors(1, 1)), 1.0));
 
-  const SVDInput pca_input(DenseMatrix(3, 2, {1.0, 0.0, 0.0, 0.0, -1.0, 0.0}),
+  const auto eigen =
+      SymmetricEigenDecomposer().decompose(Matrix(2, 2, {2.0, 0.5, 0.5, 1.0}));
+  assert(eigen.values.size() == 2);
+  assert(eigen.values[0] > eigen.values[1]);
+  assert(std::abs(eigen.vectors(0, 0)) > 0.0);
+
+  const SVDInput pca_input(Matrix(3, 2, {1.0, 0.0, 0.0, 0.0, -1.0, 0.0}),
                            {"T1", "T2", "T3"}, {"VOL_SHORT", "VOL_LONG"});
 
   const auto pca = PCATransformer(PCAOptions{
@@ -57,6 +65,35 @@ int main() {
   assert(nearly_equal(std::abs(pca.loadings(0, 0)), 1.0));
   assert(nearly_equal(std::abs(pca.loadings(1, 1)), 1.0));
   assert(nearly_equal(pca.explained_variance_ratio[0], 1.0));
+
+  const auto covariance_pca = PCATransformer(PCAOptions{
+                                                 .center_columns = true,
+                                                 .components = 2,
+                                                 .solver = PCASolver::Covariance,
+                                                 .factor_type = "VOL_PCA",
+                                                 .factor_name_prefix = "VOL_PC",
+                                             })
+                                  .fit_transform(pca_input);
+  assert(nearly_equal(covariance_pca.explained_variance[0], pca.explained_variance[0]));
+  assert(nearly_equal(covariance_pca.explained_variance[1], pca.explained_variance[1]));
+  assert(nearly_equal(std::abs(covariance_pca.loadings(0, 0)),
+                      std::abs(pca.loadings(0, 0))));
+  assert(nearly_equal(std::abs(covariance_pca.loadings(1, 1)),
+                      std::abs(pca.loadings(1, 1))));
+
+  bool rejected_not_demeaned_covariance_input = false;
+  try {
+    const SVDInput non_demeaned_input(Matrix(3, 2, {1.0, 2.0, 2.0, 4.0, 3.0, 8.0}));
+    (void)PCATransformer(PCAOptions{
+                             .center_columns = false,
+                             .components = 2,
+                             .solver = PCASolver::Covariance,
+                         })
+        .fit_transform(non_demeaned_input);
+  } catch (const std::invalid_argument &) {
+    rejected_not_demeaned_covariance_input = true;
+  }
+  assert(rejected_not_demeaned_covariance_input);
 
   const auto projected = pca.project({2.0, 0.0});
   assert(projected.size() == 2);
@@ -78,7 +115,7 @@ int main() {
 
   bool rejected_bad_shape = false;
   try {
-    (void)DenseMatrix(2, 2, {1.0, 2.0, 3.0});
+    (void)Matrix(2, 2, {1.0, 2.0, 3.0});
   } catch (const std::invalid_argument &) {
     rejected_bad_shape = true;
   }

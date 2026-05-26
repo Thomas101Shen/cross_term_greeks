@@ -1,5 +1,7 @@
 #include "decomposition/SVD/SVDInput.hpp"
 
+#include "mbs/numerics/CompensatedSum.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -8,8 +10,8 @@ namespace decomposition::SVD {
 
 namespace {
 
-DenseMatrix transpose(const DenseMatrix &matrix) {
-  DenseMatrix result = DenseMatrix::zeros(matrix.cols(), matrix.rows());
+Matrix transpose(const Matrix &matrix) {
+  Matrix result = Matrix::zeros(matrix.cols(), matrix.rows());
   for (std::size_t row = 0; row < matrix.rows(); ++row) {
     for (std::size_t col = 0; col < matrix.cols(); ++col) {
       result(col, row) = matrix(row, col);
@@ -18,38 +20,33 @@ DenseMatrix transpose(const DenseMatrix &matrix) {
   return result;
 }
 
-DenseMatrix multiply(const DenseMatrix &lhs, const DenseMatrix &rhs) {
+Matrix multiply(const Matrix &lhs, const Matrix &rhs) {
   if (lhs.cols() != rhs.rows()) {
     throw std::invalid_argument("multiply: incompatible matrix shapes");
   }
 
-  DenseMatrix result = DenseMatrix::zeros(lhs.rows(), rhs.cols());
+  Matrix result = Matrix::zeros(lhs.rows(), rhs.cols());
   for (std::size_t row = 0; row < lhs.rows(); ++row) {
     for (std::size_t col = 0; col < rhs.cols(); ++col) {
-      double value = 0.0;
+      mbs::numerics::CompensatedSum sum;
       for (std::size_t inner = 0; inner < lhs.cols(); ++inner) {
-        value += lhs(row, inner) * rhs(inner, col);
+        sum.add(lhs(row, inner) * rhs(inner, col));
       }
-      result(row, col) = value;
+      result(row, col) = sum.value();
     }
   }
   return result;
 }
 
-struct EigenResult {
-  std::vector<double> values;
-  DenseMatrix vectors;
-};
-
-EigenResult jacobi_eigen_symmetric(const DenseMatrix &input, double tolerance,
-                                   std::size_t max_sweeps) {
+SymmetricEigenResult jacobi_eigen_symmetric(const Matrix &input, double tolerance,
+                                            std::size_t max_sweeps) {
   if (input.rows() != input.cols()) {
     throw std::invalid_argument("jacobi_eigen_symmetric: matrix must be square");
   }
 
   const std::size_t size = input.rows();
-  DenseMatrix matrix = input;
-  DenseMatrix vectors = DenseMatrix::identity(size);
+  Matrix matrix = input;
+  Matrix vectors = Matrix::identity(size);
 
   for (std::size_t sweep = 0; sweep < max_sweeps; ++sweep) {
     std::size_t pivot_row = 0;
@@ -109,7 +106,8 @@ EigenResult jacobi_eigen_symmetric(const DenseMatrix &input, double tolerance,
     values[index] = matrix(index, index);
   }
 
-  return EigenResult{.values = std::move(values), .vectors = std::move(vectors)};
+  return SymmetricEigenResult{.values = std::move(values),
+                              .vectors = std::move(vectors)};
 }
 
 std::vector<std::size_t> descending_order(const std::vector<double> &values) {
@@ -123,21 +121,21 @@ std::vector<std::size_t> descending_order(const std::vector<double> &values) {
 
 } // namespace
 
-DenseMatrix DenseMatrix::zeros(std::size_t rows, std::size_t cols) {
-  return DenseMatrix(rows, cols, std::vector<double>(rows * cols, 0.0));
+Matrix Matrix::zeros(std::size_t rows, std::size_t cols) {
+  return Matrix(rows, cols, std::vector<double>(rows * cols, 0.0));
 }
 
-DenseMatrix DenseMatrix::identity(std::size_t size) {
-  DenseMatrix result = zeros(size, size);
+Matrix Matrix::identity(std::size_t size) {
+  Matrix result = zeros(size, size);
   for (std::size_t index = 0; index < size; ++index) {
     result(index, index) = 1.0;
   }
   return result;
 }
 
-std::vector<double> DenseMatrix::column(std::size_t col) const {
+std::vector<double> Matrix::column(std::size_t col) const {
   if (col >= cols_) {
-    throw std::out_of_range("DenseMatrix::column: column out of range");
+    throw std::out_of_range("Matrix::column: column out of range");
   }
 
   std::vector<double> result(rows_);
@@ -147,7 +145,7 @@ std::vector<double> DenseMatrix::column(std::size_t col) const {
   return result;
 }
 
-SVDInput::SVDInput(DenseMatrix input_matrix, std::vector<std::string> input_row_labels,
+SVDInput::SVDInput(Matrix input_matrix, std::vector<std::string> input_row_labels,
                    std::vector<std::string> input_column_labels)
     : matrix(std::move(input_matrix)), row_labels(std::move(input_row_labels)),
       column_labels(std::move(input_column_labels)) {
@@ -169,14 +167,44 @@ SVDDecomposer::SVDDecomposer(double tolerance, std::size_t max_sweeps)
   }
 }
 
+SymmetricEigenDecomposer::SymmetricEigenDecomposer(double tolerance,
+                                                   std::size_t max_sweeps)
+    : tolerance_(tolerance), max_sweeps_(max_sweeps) {
+  if (tolerance_ <= 0.0) {
+    throw std::invalid_argument("SymmetricEigenDecomposer: tolerance must be positive");
+  }
+  if (max_sweeps_ == 0) {
+    throw std::invalid_argument(
+        "SymmetricEigenDecomposer: max_sweeps must be positive");
+  }
+}
+
+SymmetricEigenResult SymmetricEigenDecomposer::decompose(const Matrix &input) const {
+  auto eigen = jacobi_eigen_symmetric(input, tolerance_, max_sweeps_);
+  const auto order = descending_order(eigen.values);
+
+  std::vector<double> values(order.size());
+  Matrix vectors = Matrix::zeros(input.cols(), input.cols());
+  for (std::size_t component = 0; component < order.size(); ++component) {
+    const std::size_t source = order[component];
+    values[component] = eigen.values[source];
+    for (std::size_t row = 0; row < input.rows(); ++row) {
+      vectors(row, component) = eigen.vectors(row, source);
+    }
+  }
+
+  return SymmetricEigenResult{.values = std::move(values),
+                              .vectors = std::move(vectors)};
+}
+
 SVDResult SVDDecomposer::decompose(const SVDInput &input) const {
-  const DenseMatrix normal = multiply(transpose(input.matrix), input.matrix);
+  const Matrix normal = multiply(transpose(input.matrix), input.matrix);
   auto eigen = jacobi_eigen_symmetric(normal, tolerance_, max_sweeps_);
   const auto order = descending_order(eigen.values);
 
   const std::size_t component_count = input.matrix.cols();
   std::vector<double> singular_values(component_count);
-  DenseMatrix right_vectors = DenseMatrix::zeros(input.matrix.cols(), component_count);
+  Matrix right_vectors = Matrix::zeros(input.matrix.cols(), component_count);
 
   for (std::size_t component = 0; component < component_count; ++component) {
     const std::size_t source = order[component];
@@ -186,7 +214,7 @@ SVDResult SVDDecomposer::decompose(const SVDInput &input) const {
     }
   }
 
-  DenseMatrix left_vectors = DenseMatrix::zeros(input.matrix.rows(), component_count);
+  Matrix left_vectors = Matrix::zeros(input.matrix.rows(), component_count);
   for (std::size_t component = 0; component < component_count; ++component) {
     const double singular_value = singular_values[component];
     if (singular_value <= tolerance_) {
@@ -194,11 +222,11 @@ SVDResult SVDDecomposer::decompose(const SVDInput &input) const {
     }
 
     for (std::size_t row = 0; row < input.matrix.rows(); ++row) {
-      double projection = 0.0;
+      mbs::numerics::CompensatedSum projection;
       for (std::size_t col = 0; col < input.matrix.cols(); ++col) {
-        projection += input.matrix(row, col) * right_vectors(col, component);
+        projection.add(input.matrix(row, col) * right_vectors(col, component));
       }
-      left_vectors(row, component) = projection / singular_value;
+      left_vectors(row, component) = projection.value() / singular_value;
     }
   }
 

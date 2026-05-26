@@ -28,13 +28,16 @@ binomial-pricing project workflow.
 
 The reusable PCA path is under `cpp/include/decomposition/SVD/`:
 
-- `DenseMatrix` owns observation-by-input data with RAII value semantics.
+- `Matrix` owns observation-by-input data with RAII value semantics.
 - `SVDInput` adds optional row and input labels.
 - `SVDDecomposer` computes singular values/vectors.
 - `PCATransformer` centers the input matrix and runs PCA through SVD.
 - `PCAResult::project(...)` maps a new raw move into component space.
 - `PCAResult::factor_basis(...)` converts PCA loadings into an `mbs::factors`
   basis that can be used by factor-volga or Hessian workflows.
+- `PCATransformer` can solve through the existing SVD path or through direct
+  covariance-matrix eigen reduction with `PCAOptions::solver =
+  PCASolver::Covariance`.
 
 The module is input-agnostic: volatility buckets, rate buckets, spread buckets,
 or any other numeric panel can use the same observation-by-feature matrix.
@@ -50,6 +53,13 @@ python3 -m venv .venv
 make python-test
 make wheel
 ```
+
+Python `fit_pca(..., solver="svd")` keeps the default SVD behavior. Use
+`fit_pca(..., solver="covariance")` to diagonalize the empirical covariance
+matrix directly, which is often the most explicit representation for fixed
+income bucket histories where off-diagonal covariance terms matter. The
+covariance solver requires demeaned columns: leave `center=True`, or pass
+pre-demeaned observations when using `center=False`.
 
 The built wheel is written to `dist/`.
 
@@ -72,11 +82,12 @@ make latex-clean
 ## C++ Layout
 
 ```text
-cpp/
+  cpp/
   include/mbs/
     attribution/   Generic attribution request/result and calculators
     factors/       Factor keys, moves, and bases
     numerics/      Finite-difference helpers
+    rates/         Curve, bootstrap, calibration, and rate-vol proxy helpers
     scenarios/     Scenario prices and lookup lattice
   src/
   tests/
@@ -91,3 +102,29 @@ The attribution layer is math-engine oriented:
 - `MatrixHessianCalculator` handles multi-factor Hessian input by producing all
   scalar diagonal terms and all pairwise cross terms, then aggregating their
   explained PnL.
+
+## Rates and Calibration Helpers
+
+The C++ rates layer is deliberately calculator-oriented: the calling app owns
+market-data loading, curve conventions, identifiers, persistence, and scenario
+orchestration. The library supplies deterministic math objects that can be fed
+by that app:
+
+- `numerics::Interpolator` supports linear, log-linear, flat-forward/log-DF,
+  and monotone cubic interpolation.
+- `rates::DiscountCurve` stores discount factors and derives zero and
+  continuously-compounded forward rates.
+- `rates::bootstrap_discount_curve(...)` bootstraps simple deposit, ZCB, and
+  par-swap instruments into a discount curve.
+- `rates::calibrate_bootstrap_curve(...)` returns model-vs-market quote errors
+  and RMSE for a bootstrapped curve.
+- `rates::derive_swaption_proxy_vol(...)` derives an annuity-weighted
+  swaption-vol proxy from forward-rate vol buckets and a correlation matrix.
+- `rates::calibrate_lmm_sofr_proxy(...)` provides a lightweight LMMSOFR-style
+  proxy calibration over forward-rate volatility buckets.
+
+This is the mathematical framework needed for calculator integration, but it is
+not a full production LMM simulator or global optimizer. If the app needs true
+multi-curve SOFR conventions, collateral/forecast curve separation, day-count
+calendars, SABR/SVI smiles, Bermudan exercise, or full swaption-surface
+calibration, those can be layered on top of these interfaces.
